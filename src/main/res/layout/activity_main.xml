@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/modelPathInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="模型路径 (例如 /sdcard/model)"
+        android:text="/data/local/tmp/qwen3-car-mnn-int4"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <!-- 第一排控制按钮 -->
+    <Button
+        android:id="@+id/initButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="初始化"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/modelPathInput"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <CheckBox
+        android:id="@+id/noThinkCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Thinking"
+        android:checked="false"
+        android:textSize="10sp"
+        app:layout_constraintBottom_toBottomOf="@id/initButton"
+        app:layout_constraintLeft_toRightOf="@id/initButton"
+        app:layout_constraintTop_toTopOf="@id/initButton"
+        android:layout_marginLeft="4dp" />
+
+    <CheckBox
+        android:id="@+id/debugModeCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="调试"
+        android:checked="true"
+        android:textSize="10sp"
+        app:layout_constraintBottom_toBottomOf="@id/initButton"
+        app:layout_constraintLeft_toRightOf="@id/noThinkCheckBox"
+        app:layout_constraintTop_toTopOf="@id/initButton"
+        android:layout_marginLeft="4dp" />
+
+    <Button
+        android:id="@+id/clearHistoryButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="重置"
+        android:layout_marginLeft="4dp"
+        app:layout_constraintLeft_toRightOf="@id/debugModeCheckBox"
+        app:layout_constraintTop_toTopOf="@id/initButton"
+        app:layout_constraintBottom_toBottomOf="@id/initButton" />
+
+    <!-- 第二排性能控制 -->
+    <CheckBox
+        android:id="@+id/promptCacheCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="P-Cache"
+        android:checked="true"
+        android:textSize="10sp"
+        app:layout_constraintTop_toBottomOf="@id/initButton"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <TextView
+        android:id="@+id/perfLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="后端:"
+        android:textSize="10sp"
+        app:layout_constraintBottom_toBottomOf="@id/promptCacheCheckBox"
+        app:layout_constraintLeft_toRightOf="@id/promptCacheCheckBox"
+        app:layout_constraintTop_toTopOf="@id/promptCacheCheckBox"
+        android:layout_marginLeft="8dp" />
+
+    <RadioGroup
+        android:id="@+id/backendGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintLeft_toRightOf="@id/perfLabel"
+        app:layout_constraintTop_toTopOf="@id/promptCacheCheckBox"
+        app:layout_constraintBottom_toBottomOf="@id/promptCacheCheckBox"
+        android:layout_marginLeft="4dp">
+        <RadioButton
+            android:id="@+id/rbCpu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CPU"
+            android:checked="true"
+            android:textSize="10sp" />
+        <RadioButton
+            android:id="@+id/rbGpu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPU"
+            android:textSize="10sp" />
+    </RadioGroup>
+
+    <EditText
+        android:id="@+id/tempInput"
+        android:layout_width="50dp"
+        android:layout_height="wrap_content"
+        android:hint="T"
+        android:text="0.0"
+        android:inputType="numberDecimal"
+        android:textSize="10sp"
+        android:layout_marginLeft="4dp"
+        app:layout_constraintTop_toTopOf="@id/promptCacheCheckBox"
+        app:layout_constraintBottom_toBottomOf="@id/promptCacheCheckBox"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <EditText
+        android:id="@+id/systemPromptInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="System Prompt"
+        android:text="You are a helpful assistant."
+        android:layout_marginTop="4dp"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/promptCacheCheckBox"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <TextView
+        android:id="@+id/perfMetricsText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="性能: 等待生成..."
+        android:textSize="12sp"
+        android:textColor="#2E7D32"
+        android:background="#E8F5E9"
+        android:padding="4dp"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/systemPromptInput"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <EditText
+        android:id="@+id/promptInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="输入问题..."
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/perfMetricsText"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toLeftOf="@id/sendButton" />
+
+    <Button
+        android:id="@+id/sendButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="发送"
+        app:layout_constraintBottom_toBottomOf="@id/promptInput"
+        app:layout_constraintRight_toLeftOf="@id/stopButton"
+        app:layout_constraintTop_toTopOf="@id/promptInput" />
+
+    <Button
+        android:id="@+id/stopButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="停"
+        android:backgroundTint="#FF5722"
+        app:layout_constraintBottom_toBottomOf="@id/promptInput"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="@id/promptInput" />
+
+    <CheckBox
+        android:id="@+id/streamCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="流式"
+        android:checked="true"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/uploadImageButton"
+        app:layout_constraintLeft_toLeftOf="parent"
+        android:layout_marginTop="4dp" />
+
+    <Button
+        android:id="@+id/uploadImageButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="选图"
+        android:layout_marginTop="4dp"
+        app:layout_constraintTop_toBottomOf="@id/promptInput"
+        app:layout_constraintLeft_toLeftOf="parent" />
+
+    <Button
+        android:id="@+id/clearImageButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="清图"
+        app:layout_constraintTop_toTopOf="@id/uploadImageButton"
+        app:layout_constraintBottom_toBottomOf="@id/uploadImageButton"
+        app:layout_constraintLeft_toRightOf="@id/uploadImageButton"
+        android:layout_marginLeft="4dp" />
+
+    <TextView
+        android:id="@+id/imageStatusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="未选择图片"
+        android:textSize="12sp"
+        android:singleLine="true"
+        android:ellipsize="middle"
+        android:layout_marginLeft="8dp"
+        app:layout_constraintTop_toTopOf="@id/uploadImageButton"
+        app:layout_constraintBottom_toBottomOf="@id/uploadImageButton"
+        app:layout_constraintLeft_toRightOf="@id/clearImageButton"
+        app:layout_constraintRight_toRightOf="parent" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:background="#F0F0F0"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/streamCheckBox">
+
+        <TextView
+            android:id="@+id/responseText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="结果..."
+            android:textColor="#333333" />
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

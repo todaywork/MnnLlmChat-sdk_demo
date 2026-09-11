@@ -1,0 +1,15 @@
+# Build outputs
+build/
+*/build/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+
+# Local config
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
