@@ -10,6 +10,9 @@
         android:label="SDK Demo"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <activity android:name=".BatchActivity" android:exported="true"
+            android:theme="@style/Theme.SdkBatch"
+            android:configChanges="orientation|screenSize" />
         <activity
             android:name=".MainActivity"
             android:exported="true">

@@ -1,16 +1,21 @@
 package com.alibaba.mnnllm.sdk_demo
 
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.alibaba.mnnllm.ondeviceai.OnDeviceAiEngine
 import java.io.File
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
+    private val inferenceExecutor = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "sdk-inference")
+    }
+    @Volatile private var closing = false
     private lateinit var engine: OnDeviceAiEngine
     private lateinit var responseText: TextView
     private lateinit var promptInput: EditText
@@ -26,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var imageStatusText: TextView
     private lateinit var sendButton: Button
     private lateinit var initButton: Button
+    @Volatile private var initializing = false
     private val selectedImages = mutableListOf<OnDeviceAiEngine.UploadedImage>()
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { importSelectedImage(it) }
@@ -70,28 +76,40 @@ class MainActivity : AppCompatActivity() {
         }
 
         noThinkCheckBox.setOnCheckedChangeListener { _, isChecked ->
-            engine.setThinking(isChecked)
+            inferenceExecutor.execute { if (!closing) engine.setThinking(isChecked) }
             Toast.makeText(this, "已${if (isChecked) "启用" else "禁用"}Thinking引导", Toast.LENGTH_SHORT).show()
         }
 
         findViewById<Button>(R.id.clearHistoryButton).setOnClickListener {
-            engine.reset()
-            responseText.text = "对话历史已清空"
-            Toast.makeText(this, "历史记录已清空", Toast.LENGTH_SHORT).show()
+            engine.stopChat()
+            inferenceExecutor.execute {
+                if (closing) return@execute
+                engine.reset()
+                updateUi {
+                    responseText.text = "对话历史已清空"
+                    Toast.makeText(this, "历史记录已清空", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         findViewById<Button>(R.id.initButton).setOnClickListener {
+            if (initializing || engine.isGenerating()) return@setOnClickListener
+            initializing = true
             val path = modelPathInput.text.toString()
             val systemPrompt = systemPromptInput.text.toString()
             val backend = if (rbGpu.isChecked) "opencl" else "cpu"
             val temperature = tempInput.text.toString().toFloatOrNull() ?: 0.6f
-            
-            thread {
+            val usePromptCache = promptCacheCheckBox.isChecked
+            initButton.isEnabled = false
+            sendButton.isEnabled = false
+
+            inferenceExecutor.execute {
+                if (closing) return@execute
                 val config = OnDeviceAiEngine.PerformanceConfig(
                     backendType = backend,
                     threadNum = 4,
                     precision = "low",
-                    promptCache = promptCacheCheckBox.isChecked,
+                    promptCache = usePromptCache,
                     reuseKv = true,
                     maxHistory = 1,
                     temperature = temperature,
@@ -100,12 +118,19 @@ class MainActivity : AppCompatActivity() {
                     maxNewTokens = 64,
                     samplerType = "greedy"
                 )
-                val success = engine.init(path, config, systemPrompt, isThinking = false)
-                runOnUiThread {
-                    if (success) {
-                        Toast.makeText(this, "模型初始化成功", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "模型初始化失败，请检查路径", Toast.LENGTH_LONG).show()
+                try {
+                    val success = engine.init(path, config, systemPrompt, isThinking = false)
+                    updateUi {
+                        Toast.makeText(this, if (success) "模型初始化成功" else
+                            "模型初始化失败，请检查路径", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    updateUi { responseText.text = "初始化失败：${e.message}" }
+                } finally {
+                    initializing = false
+                    updateUi {
+                        initButton.isEnabled = true
+                        sendButton.isEnabled = true
                     }
                 }
             }
@@ -122,6 +147,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         sendButton.setOnClickListener {
+            if (closing || initializing || !sendButton.isEnabled) return@setOnClickListener
             val prompt = promptInput.text.toString().trim()
             if (prompt.isEmpty()) return@setOnClickListener
 
@@ -130,53 +156,62 @@ class MainActivity : AppCompatActivity() {
             responseText.text = if (isStreaming) "正在流式思考..." else "正在同步生成 (请稍候)..."
             
             initButton.isEnabled = false
+            sendButton.isEnabled = false
 
-            thread {
-                if (isStreaming) {
-                    val rawResponse = StringBuilder()
-                    var sawEnd = false
-                    engine.chat(prompt, requestImages, object : OnDeviceAiEngine.ChatCallback {
-                        override fun onToken(token: String, isEnd: Boolean): Boolean {
-                            if (isEnd) {
-                                sawEnd = true
-                            }
-                            runOnUiThread {
-                                if (!isEnd) {
-                                    rawResponse.append(token)
-                                    if (responseText.text.startsWith("正在流式")) {
-                                        responseText.text = "正在生成..."
+            inferenceExecutor.execute {
+                if (closing) return@execute
+                try {
+                    if (isStreaming) {
+                        val rawResponse = StringBuilder()
+                        var sawEnd = false
+                        engine.chat(prompt, requestImages, object : OnDeviceAiEngine.ChatCallback {
+                            override fun onToken(token: String, isEnd: Boolean): Boolean {
+                                if (isEnd) {
+                                    sawEnd = true
+                                }
+                                updateUi {
+                                    if (!isEnd) {
+                                        rawResponse.append(token)
+                                        if (responseText.text.startsWith("正在流式")) {
+                                            responseText.text = "正在生成..."
+                                        } else {
+                                            responseText.text = "正在生成..."
+                                        }
                                     } else {
-                                        responseText.text = "正在生成..."
+                                        responseText.text = normalizeCommandResponse(rawResponse.toString())
+                                        responseText.append("\n\n[回答结束]")
                                     }
-                                } else {
-                                    responseText.text = normalizeCommandResponse(rawResponse.toString())
-                                    responseText.append("\n\n[回答结束]")
-                                    initButton.isEnabled = true
+                                }
+                                return true
+                            }
+
+                            override fun onPerformanceUpdate(prefillTimeMs: Long, decodeTimeMs: Long, tokenCount: Int) {
+                                updateUi {
+                                    val tps = if (decodeTimeMs > 0) (tokenCount * 1000.0 / decodeTimeMs) else 0.0
+                                    perfMetricsText.text = "性能指标: Prefill: ${prefillTimeMs}ms | Decode: ${decodeTimeMs}ms | Tokens: $tokenCount | Speed: %.2f t/s".format(tps)
                                 }
                             }
-                            return true
-                        }
-
-                        override fun onPerformanceUpdate(prefillTimeMs: Long, decodeTimeMs: Long, tokenCount: Int) {
-                            runOnUiThread {
-                                val tps = if (decodeTimeMs > 0) (tokenCount * 1000.0 / decodeTimeMs) else 0.0
-                                perfMetricsText.text = "性能指标: Prefill: ${prefillTimeMs}ms | Decode: ${decodeTimeMs}ms | Tokens: $tokenCount | Speed: %.2f t/s".format(tps)
+                        })
+                        if (!sawEnd) {
+                            updateUi {
+                                responseText.text = normalizeCommandResponse(rawResponse.toString())
+                                responseText.append("\n\n[回答结束]")
                             }
                         }
-                    })
-                    if (!sawEnd) {
-                        runOnUiThread {
-                            responseText.text = normalizeCommandResponse(rawResponse.toString())
-                            responseText.append("\n\n[回答结束]")
-                            initButton.isEnabled = true
+                    } else {
+                        val fullResponse = engine.chatSync(prompt, requestImages)
+                        updateUi {
+                            responseText.text = normalizeCommandResponse(fullResponse)
+                            responseText.append("\n\n[同步回答结束]")
                         }
                     }
-                } else {
-                    val fullResponse = engine.chatSync(prompt, requestImages)
-                    runOnUiThread {
-                        responseText.text = normalizeCommandResponse(fullResponse)
-                        responseText.append("\n\n[同步回答结束]")
+                } catch (e: Exception) {
+                    updateUi { responseText.text = "推理失败：${e.message}" }
+                } finally {
+                    // A token marked as end can arrive before native cleanup finishes.
+                    updateUi {
                         initButton.isEnabled = true
+                        sendButton.isEnabled = true
                     }
                 }
             }
@@ -185,6 +220,32 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.stopButton).setOnClickListener {
             engine.stopChat()
             Toast.makeText(this, "正在中止生成...", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<Button>(R.id.batchButton).setOnClickListener {
+            if (initializing || engine.isGenerating()) {
+                Toast.makeText(this, "请等待当前任务结束", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val batchIntent = Intent(this, BatchActivity::class.java)
+                .putExtra("model_path", modelPathInput.text.toString())
+                .putExtra("system_prompt", systemPromptInput.text.toString())
+                .putExtra("backend", if (rbGpu.isChecked) "opencl" else "cpu")
+                .putExtra("temperature", tempInput.text.toString().toFloatOrNull() ?: 0f)
+                .putExtra("prompt_cache", promptCacheCheckBox.isChecked)
+            initializing = true
+            initButton.isEnabled = false
+            sendButton.isEnabled = false
+            inferenceExecutor.execute {
+                if (closing) return@execute
+                engine.release()
+                initializing = false
+                updateUi {
+                    initButton.isEnabled = true
+                    sendButton.isEnabled = true
+                    responseText.text = "已进入独立批跑；返回后请重新初始化单条推理"
+                    startActivity(batchIntent)
+                }
+            }
         }
     }
 
@@ -202,8 +263,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        closing = true
+        // Stop is intentionally immediate; a stop queued behind generate cannot
+        // interrupt it. Release runs only after the active worker task returns.
+        if (::engine.isInitialized) engine.stopChat()
+        inferenceExecutor.execute { if (::engine.isInitialized) engine.release() }
+        inferenceExecutor.shutdown()
         super.onDestroy()
-        engine.release()
+    }
+
+    private fun updateUi(action: () -> Unit) {
+        runOnUiThread { if (!closing) action() }
     }
 
     private fun normalizeCommandResponse(raw: String?): String {

@@ -13,3 +13,8 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Batch automation local outputs and authoring runtime
+scripts/__pycache__/
+scripts/batch_results/
+pc_batch_test/artifact_work/
